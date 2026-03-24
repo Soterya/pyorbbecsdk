@@ -109,6 +109,8 @@ cmake-build-*/
 
 # IntelliJ
 out/
+recordings
+multi_mkv
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
