@@ -11,7 +11,7 @@ from pyorbbecsdk import Config, Context, OBError, OBFormat, OBSensorType, Pipeli
 
 
 ESC_KEY = 27
-DEVICE_INDEX = 1
+DEVICE_INDEX = 0
 
 
 def frame_to_bgr_image(color_frame):
