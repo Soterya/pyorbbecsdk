@@ -7,6 +7,9 @@ from typing import List
 from pyorbbecsdk import *
 
 MAX_DEVICES = 2
+WFOV_BINNED_DEPTH_WIDTH = 512
+WFOV_BINNED_DEPTH_HEIGHT = 512
+RECORD_FPS = 15
 
 multi_device_sync_config = {}
 recorders: List[RecordDevice | None] = [None for _ in range(MAX_DEVICES)]
@@ -81,20 +84,53 @@ def stop_recorders():
         recorders[i] = None
 
 
-def enable_default_streams(pipeline: Pipeline, config: Config):
+def select_wfov_binned_depth_profile(pipeline: Pipeline) -> VideoStreamProfile:
+    depth_profiles = pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
+    # Femto Bolt WFOV binned target: 512x512 Y16 @ configured record FPS
+    return depth_profiles.get_video_stream_profile(
+        WFOV_BINNED_DEPTH_WIDTH,
+        WFOV_BINNED_DEPTH_HEIGHT,
+        OBFormat.Y16,
+        RECORD_FPS,
+    )
+
+
+def enable_default_streams(pipeline: Pipeline, config: Config, serial_number: str):
     try:
         color_profiles = pipeline.get_stream_profile_list(OBSensorType.COLOR_SENSOR)
-        color_profile: VideoStreamProfile = (
+        default_color_profile: VideoStreamProfile = (
             color_profiles.get_default_video_stream_profile()
         )
+        color_profile = color_profiles.get_video_stream_profile(
+            default_color_profile.get_width(),
+            default_color_profile.get_height(),
+            default_color_profile.get_format(),
+            RECORD_FPS,
+        )
         config.enable_stream(color_profile)
+        print(
+            f"{serial_number}: color "
+            f"{color_profile.get_width()}x{color_profile.get_height()} "
+            f"{color_profile.get_format()} @{color_profile.get_fps()}fps"
+        )
     except OBError:
         pass
 
-    depth_profiles = pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
-    depth_profile: VideoStreamProfile = (
-        depth_profiles.get_default_video_stream_profile()
-    )
+    try:
+        depth_profile = select_wfov_binned_depth_profile(pipeline)
+        print(
+            f"{serial_number}: using WFOV binned depth "
+            f"{depth_profile.get_width()}x{depth_profile.get_height()} "
+            f"{depth_profile.get_format()} @{depth_profile.get_fps()}fps"
+        )
+    except OBError:
+        depth_profiles = pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
+        depth_profile = depth_profiles.get_default_video_stream_profile()
+        print(
+            f"{serial_number}: WFOV binned depth profile unavailable, fallback to "
+            f"{depth_profile.get_width()}x{depth_profile.get_height()} "
+            f"{depth_profile.get_format()} @{depth_profile.get_fps()}fps"
+        )
     config.enable_stream(depth_profile)
 
 
@@ -140,7 +176,7 @@ def main():
 
         pipeline = Pipeline(device)
         config = Config()
-        enable_default_streams(pipeline, config)
+        enable_default_streams(pipeline, config, serial_number)
 
         bag_path = os.path.join(recording_dir, f"{i}_{serial_number}.bag")
         recorders[i] = RecordDevice(device, bag_path)
