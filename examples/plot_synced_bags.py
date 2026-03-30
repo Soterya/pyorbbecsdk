@@ -28,11 +28,18 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Load two Orbbec .bag recordings, align them by nearest system timestamp, "
-            "and display a 2x2 synchronized view."
+            "and display a 2x2 synchronized view. You can pass either two .bag files "
+            "or a directory containing both bags."
         )
     )
-    parser.add_argument("camera1_bag", help="Path to the first camera .bag file.")
-    parser.add_argument("camera2_bag", help="Path to the second camera .bag file.")
+    parser.add_argument(
+        "inputs",
+        nargs="+",
+        help=(
+            "Either <camera1.bag> <camera2.bag> or a single directory containing "
+            "two .bag files such as recordings\\test."
+        ),
+    )
     parser.add_argument(
         "--every-n",
         type=int,
@@ -71,6 +78,44 @@ def parse_args():
         help="Skip OpenCV display and only save plots to disk.",
     )
     return parser.parse_args()
+
+
+def pick_bag_pair_from_dir(session_dir: Path):
+    bag_paths = sorted(session_dir.glob("*.bag"))
+    if len(bag_paths) != 2:
+        raise RuntimeError(
+            f"Expected exactly 2 .bag files in {session_dir}, found {len(bag_paths)}"
+        )
+
+    master_bag = next(
+        (path for path in bag_paths if "master" in path.stem.lower()),
+        None,
+    )
+    subordinate_bag = next(
+        (path for path in bag_paths if "subordinate" in path.stem.lower()),
+        None,
+    )
+
+    if master_bag is not None and subordinate_bag is not None:
+        return master_bag, subordinate_bag
+    return bag_paths[0], bag_paths[1]
+
+
+def resolve_input_bags(inputs: list[str]):
+    if len(inputs) == 1:
+        session_dir = Path(inputs[0])
+        if not session_dir.is_dir():
+            raise RuntimeError(
+                f"Single input must be a directory containing two .bag files: {session_dir}"
+            )
+        return pick_bag_pair_from_dir(session_dir)
+
+    if len(inputs) == 2:
+        return Path(inputs[0]), Path(inputs[1])
+
+    raise RuntimeError(
+        "Pass either one directory path or exactly two .bag file paths."
+    )
 
 
 def build_depth_visualization(depth_frame):
@@ -304,7 +349,7 @@ def build_canvas(frame1: BagFrameSet, frame2: BagFrameSet, delta_us: int, pair_i
 def resolve_output_dir(camera1_bag: Path, camera2_bag: Path, output_dir: str | None):
     if output_dir:
         return Path(output_dir)
-    return camera1_bag.parent / f"{camera1_bag.stem}__{camera2_bag.stem}_plots"
+    return camera1_bag.parent / f"{camera1_bag.stem}__{camera2_bag.stem}_sync_plots"
 
 
 def save_matches(
@@ -367,8 +412,10 @@ def main():
     max_delta_us = (
         int(args.max_delta_ms * 1000) if args.max_delta_ms is not None else None
     )
-    camera1_bag = Path(args.camera1_bag)
-    camera2_bag = Path(args.camera2_bag)
+    camera1_bag, camera2_bag = resolve_input_bags(args.inputs)
+
+    print(f"Camera 1 bag: {camera1_bag}")
+    print(f"Camera 2 bag: {camera2_bag}")
 
     camera1_frames = load_bag_frames(camera1_bag, args.every_n)
     camera2_frames = load_bag_frames(camera2_bag, args.every_n)

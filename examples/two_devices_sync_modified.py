@@ -124,12 +124,10 @@ def enable_default_streams(pipeline: Pipeline, config: Config, serial_number: st
             f"{depth_profile.get_format()} @{depth_profile.get_fps()}fps"
         )
     except OBError:
-        depth_profiles = pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
-        depth_profile = depth_profiles.get_default_video_stream_profile()
-        print(
-            f"{serial_number}: WFOV binned depth profile unavailable, fallback to "
-            f"{depth_profile.get_width()}x{depth_profile.get_height()} "
-            f"{depth_profile.get_format()} @{depth_profile.get_fps()}fps"
+        raise RuntimeError(
+            f"{serial_number}: required depth profile "
+            f"{WFOV_BINNED_DEPTH_WIDTH}x{WFOV_BINNED_DEPTH_HEIGHT} "
+            f"{OBFormat.Y16} @{RECORD_FPS}fps is unavailable"
         )
     config.enable_stream(depth_profile)
 
